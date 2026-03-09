@@ -17,10 +17,10 @@ infer_type() {
   esac
 }
 
-# Lista arquivos modificados e não rastreados ($NF pega o path mesmo em renames)
+# Lista cada arquivo (não diretório): -u faz o git listar arquivos untracked um a um
 # Usa while read em vez de mapfile para compatibilidade com Bash 3 (macOS)
 FILES=()
-while IFS= read -r line; do FILES+=("$line"); done < <(git status --short | awk '{ if (NF >= 2) print $NF }')
+while IFS= read -r line; do FILES+=("$line"); done < <(git status --short -u | awk '{ if (NF >= 2) print $NF }')
 
 if [ ${#FILES[@]} -eq 0 ]; then
   echo "Nenhum arquivo para commitar."
@@ -30,8 +30,10 @@ fi
 echo "Encontrados ${#FILES[@]} arquivo(s). Tipo inferido por arquivo."
 echo ""
 
+COUNT=0
 for file in "${FILES[@]}"; do
-  # Pula se for diretório (git status pode listar dir com /)
+  # Pula se for diretório (path com / no final ou diretório existente)
+  [[ "$file" == */ ]] && continue
   [ -d "$file" ] && continue
 
   TYPE=$(infer_type "$file")
@@ -46,7 +48,8 @@ for file in "${FILES[@]}"; do
   git add "$file"
   echo ">>> git commit -m \"$TYPE: $desc\""
   git commit -m "$TYPE: $desc"
+  ((COUNT++)) || true
   echo ""
 done
 
-echo "Pronto. ${#FILES[@]} commit(s) criado(s)."
+echo "Pronto. $COUNT commit(s) criado(s)."
