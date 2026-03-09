@@ -1,16 +1,22 @@
 package main
 
-import "fmt"
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+
+	"api-gateway-go/internal/config"
+	"api-gateway-go/internal/container"
+
+	"github.com/joho/godotenv"
+)
 
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "Hello, World!")
-	})
+	_ = godotenv.Load(".env")
+	cfg := config.NewConfig()
+	container := container.New(cfg)
 
 	fmt.Println("Server is running on port 8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := http.ListenAndServe(":8080", container.Mux); err != nil {
 		fmt.Println(err)
 	}
-
 }
