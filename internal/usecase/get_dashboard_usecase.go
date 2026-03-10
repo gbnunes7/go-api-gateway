@@ -3,6 +3,7 @@ package usecase
 import (
 	"api-gateway-go/internal/contract"
 	"api-gateway-go/internal/dto"
+	"api-gateway-go/internal/utils"
 	"context"
 )
 
@@ -66,22 +67,22 @@ func (u *GetDashboardUsecase) Execute(ctx context.Context) (dto.DashboardRespons
 	if ru.err != nil {
 		return dto.DashboardResponse{}, ru.err
 	}
-	if ro.err != nil {
-		return dto.DashboardResponse{}, ro.err
-	}
-	if rb.err != nil {
-		return dto.DashboardResponse{}, rb.err
-	}
 
 	billingByOrderID := make(map[string]dto.Billing)
-	for _, b := range rb.billings {
-		billingByOrderID[b.OrderID] = b
+	if rb.err == nil {
+		for _, b := range rb.billings {
+			billingByOrderID[b.OrderID] = b
+		}
 	}
 
 	var out []dto.UserWithOrders
 	for _, u := range ru.users {
 		userRow := dto.UserWithOrders{ID: u.ID, Name: u.Name, Email: u.Email}
-		for _, o := range ro.orders {
+		ordersList := ro.orders
+		if ro.err != nil {
+			ordersList = nil
+		}
+		for _, o := range ordersList {
 			if o.UserID != u.ID {
 				continue
 			}
@@ -93,5 +94,22 @@ func (u *GetDashboardUsecase) Execute(ctx context.Context) (dto.DashboardRespons
 		}
 		out = append(out, userRow)
 	}
-	return dto.DashboardResponse{Users: out}, nil
+
+	var errs map[string]string
+	if ro.err != nil {
+		if errs == nil {
+			errs = make(map[string]string)
+		}
+		_, message := utils.StatusAndMessageFromError(ro.err)
+		errs["orders"] = message
+	}
+	if rb.err != nil {
+		if errs == nil {
+			errs = make(map[string]string)
+		}
+		_, message := utils.StatusAndMessageFromError(rb.err)
+		errs["billings"] = message
+	}
+
+	return dto.DashboardResponse{Users: out, Errors: errs}, nil
 }
