@@ -1,4 +1,4 @@
-package usecase
+package usecase_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"api-gateway-go/internal/dto"
+	"api-gateway-go/internal/usecase"
 )
 
 type mockUsersProvider struct {
@@ -91,7 +92,7 @@ func TestExecute_Success(t *testing.T) {
 		{ID: "b1", PaymentType: "credit", PaidValue: 100, OrderID: "order-1"},
 	}
 
-	uc := NewGetDashboardUsecase(
+	uc := usecase.NewGetDashboardUsecase(
 		&mockUsersProvider{users: users},
 		&mockOrdersProvider{orders: orders},
 		&mockBillingsProvider{billings: billings},
@@ -123,7 +124,7 @@ func TestExecute_Success(t *testing.T) {
 
 func TestExecute_UsersError(t *testing.T) {
 	wantErr := errors.New("users service unavailable")
-	uc := NewGetDashboardUsecase(
+	uc := usecase.NewGetDashboardUsecase(
 		&mockUsersProvider{err: wantErr},
 		&mockOrdersProvider{orders: []dto.Order{}},
 		&mockBillingsProvider{billings: []dto.Billing{}},
@@ -138,31 +139,50 @@ func TestExecute_UsersError(t *testing.T) {
 
 func TestExecute_OrdersError(t *testing.T) {
 	wantErr := errors.New("orders service unavailable")
-	uc := NewGetDashboardUsecase(
-		&mockUsersProvider{users: []dto.User{}},
+	uc := usecase.NewGetDashboardUsecase(
+		&mockUsersProvider{users: []dto.User{{ID: "user-1", Name: "John", Email: "j@x.com", OrderID: ""}}},
 		&mockOrdersProvider{err: wantErr},
 		&mockBillingsProvider{billings: []dto.Billing{}},
 	)
 
 	ctx := context.Background()
-	_, err := uc.Execute(ctx)
-	if err != wantErr {
-		t.Errorf("Execute() err = %v, want %v", err, wantErr)
+	resp, err := uc.Execute(ctx)
+	if err != nil {
+		t.Fatalf("Execute() err = %v, want nil (graceful degradation)", err)
+	}
+	if len(resp.Users) != 1 {
+		t.Fatalf("len(resp.Users) = %d, want 1", len(resp.Users))
+	}
+	if len(resp.Users[0].Orders) != 0 {
+		t.Errorf("len(resp.Users[0].Orders) = %d, want 0 (orders failed)", len(resp.Users[0].Orders))
+	}
+	if resp.Errors == nil || resp.Errors["orders"] == "" {
+		t.Errorf("resp.Errors[orders] want set, got %v", resp.Errors)
 	}
 }
 
 func TestExecute_BillingsError(t *testing.T) {
 	wantErr := errors.New("billings service unavailable")
-	uc := NewGetDashboardUsecase(
-		&mockUsersProvider{users: []dto.User{}},
-		&mockOrdersProvider{orders: []dto.Order{}},
+	uc := usecase.NewGetDashboardUsecase(
+		&mockUsersProvider{users: []dto.User{{ID: "user-1", Name: "John", Email: "j@x.com", OrderID: "order-1"}}},
+		&mockOrdersProvider{orders: []dto.Order{{ID: "order-1", TotalPrice: 100, CreatedAt: "2025-01-01", BillingID: "b1", UserID: "user-1"}}},
 		&mockBillingsProvider{err: wantErr},
 	)
 
 	ctx := context.Background()
-	_, err := uc.Execute(ctx)
-	if err != wantErr {
-		t.Errorf("Execute() err = %v, want %v", err, wantErr)
+	resp, err := uc.Execute(ctx)
+	if err != nil {
+		t.Fatalf("Execute() err = %v, want nil (graceful degradation)", err)
+	}
+	if len(resp.Users) != 1 || len(resp.Users[0].Orders) != 1 {
+		t.Fatalf("want 1 user with 1 order, got %d users", len(resp.Users))
+	}
+	o := resp.Users[0].Orders[0]
+	if o.Billing != nil {
+		t.Errorf("order.Billing = %v, want nil (billings failed)", o.Billing)
+	}
+	if resp.Errors == nil || resp.Errors["billings"] == "" {
+		t.Errorf("resp.Errors[billings] want set, got %v", resp.Errors)
 	}
 }
 
@@ -170,7 +190,7 @@ func TestExecute_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	uc := NewGetDashboardUsecase(
+	uc := usecase.NewGetDashboardUsecase(
 		&mockUsersProviderContextAware{},
 		&mockOrdersProvider{orders: []dto.Order{}},
 		&mockBillingsProvider{billings: []dto.Billing{}},
@@ -186,7 +206,7 @@ func TestExecute_ContextCancelled(t *testing.T) {
 }
 
 func TestExecute_EmptyData(t *testing.T) {
-	uc := NewGetDashboardUsecase(
+	uc := usecase.NewGetDashboardUsecase(
 		&mockUsersProvider{users: []dto.User{}},
 		&mockOrdersProvider{orders: []dto.Order{}},
 		&mockBillingsProvider{billings: []dto.Billing{}},
@@ -204,7 +224,7 @@ func TestExecute_EmptyData(t *testing.T) {
 
 func TestExecute_ParallelTiming(t *testing.T) {
 	t.Log("1. Criando use case com mocks lentos: users=100ms, orders=200ms, billings=150ms")
-	uc := NewGetDashboardUsecase(
+	uc := usecase.NewGetDashboardUsecase(
 		&mockUsersProviderSlow{delay: 100 * time.Millisecond, users: []dto.User{}},
 		&mockOrdersProviderSlow{delay: 200 * time.Millisecond, orders: []dto.Order{}},
 		&mockBillingsProviderSlow{delay: 150 * time.Millisecond, billings: []dto.Billing{}},
