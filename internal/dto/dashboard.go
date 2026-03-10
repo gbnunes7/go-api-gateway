@@ -1,7 +1,8 @@
 package dto
 
 type DashboardResponse struct {
-	Users []UserWithOrders `json:"users"`
+	Users  []UserWithOrders  `json:"users"`
+	Errors map[string]string `json:"errors,omitempty"`
 }
 
 type UserWithOrders struct {
