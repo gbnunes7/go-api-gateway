@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"api-gateway-go/internal/constants"
@@ -24,7 +23,6 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	
 
 	traceID := utils.GetOrGenerateTraceID(r)
 
@@ -41,12 +39,9 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.getDashboard.Execute(ctx)
 	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			w.WriteHeader(http.StatusGatewayTimeout)
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		status, message := utils.StatusAndMessageFromError(err)
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
