@@ -3,6 +3,7 @@ package usecase
 import (
 	"api-gateway-go/internal/contract"
 	"api-gateway-go/internal/dto"
+	"api-gateway-go/internal/observability/logger"
 	"api-gateway-go/internal/utils"
 	"context"
 )
@@ -26,21 +27,26 @@ type GetDashboardUsecase struct {
 	usersProvider    contract.UsersProvider
 	ordersProvider   contract.OrdersProvider
 	billingsProvider contract.BillingsProvider
+	logger           logger.Logger
 }
 
 func NewGetDashboardUsecase(
 	users contract.UsersProvider,
 	orders contract.OrdersProvider,
 	billings contract.BillingsProvider,
+	logger logger.Logger,
 ) *GetDashboardUsecase {
 	return &GetDashboardUsecase{
 		usersProvider:    users,
 		ordersProvider:   orders,
 		billingsProvider: billings,
+		logger:           logger,
 	}
 }
 
 func (u *GetDashboardUsecase) Execute(ctx context.Context) (dto.DashboardResponse, error) {
+	u.logger.WithContext(ctx).Info().Msg("Executing GetDashboardUsecase")
+
 	usersChan := make(chan usersResult, 1)
 	ordersChan := make(chan ordersResult, 1)
 	billingsChan := make(chan billingsResult, 1)
@@ -65,6 +71,10 @@ func (u *GetDashboardUsecase) Execute(ctx context.Context) (dto.DashboardRespons
 	rb := <-billingsChan
 
 	if ru.err != nil {
+		u.logger.WithContext(ctx).Error().
+			Err(ru.err).
+			Str("service", "users").
+			Msg("Error getting users")
 		return dto.DashboardResponse{}, ru.err
 	}
 
@@ -102,6 +112,10 @@ func (u *GetDashboardUsecase) Execute(ctx context.Context) (dto.DashboardRespons
 		}
 		_, message := utils.StatusAndMessageFromError(ro.err)
 		errs["orders"] = message
+		u.logger.WithContext(ctx).Warn().
+			Err(ro.err).
+			Str("service", "orders").
+			Msg("orders provider failed")
 	}
 	if rb.err != nil {
 		if errs == nil {
@@ -109,7 +123,15 @@ func (u *GetDashboardUsecase) Execute(ctx context.Context) (dto.DashboardRespons
 		}
 		_, message := utils.StatusAndMessageFromError(rb.err)
 		errs["billings"] = message
+		u.logger.WithContext(ctx).Warn().
+			Err(rb.err).
+			Str("service", "billings").
+			Msg("billings provider failed")
 	}
+
+	u.logger.WithContext(ctx).Info().
+		Int("users_count", len(out)).
+		Msg("dashboard execute completed")
 
 	return dto.DashboardResponse{Users: out, Errors: errs}, nil
 }
