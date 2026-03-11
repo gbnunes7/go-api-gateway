@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"api-gateway-go/internal/dto"
+	"api-gateway-go/internal/observability/logger"
 	"api-gateway-go/internal/usecase"
 )
 
@@ -14,6 +15,45 @@ type mockUsersProvider struct {
 	users []dto.User
 	err   error
 }
+
+type mockLogger struct {
+}
+
+func (m *mockLogger) WithContext(ctx context.Context) logger.Logger {
+	return m
+}
+
+func (m *mockLogger) Info() logger.Event {
+	return m
+}
+
+func (m *mockLogger) Error() logger.Event {
+	return m
+}
+
+func (m *mockLogger) Warn() logger.Event {
+	return m
+}
+
+func (m *mockLogger) Debug() logger.Event {
+	return m
+}
+
+func (m *mockLogger) Str(key string, val string) logger.Event {
+	return m
+}
+
+func (m *mockLogger) Int(key string, val int) logger.Event {
+	return m
+}
+
+func (m *mockLogger) Err(err error) logger.Event {
+	return m
+}
+
+func (m *mockLogger) Msg(msg string) {}
+
+func (m *mockLogger) Msgf(format string, args ...interface{}) {}
 
 func (m *mockUsersProvider) GetUsers(ctx context.Context) ([]dto.User, error) {
 	return m.users, m.err
@@ -96,6 +136,7 @@ func TestExecute_Success(t *testing.T) {
 		&mockUsersProvider{users: users},
 		&mockOrdersProvider{orders: orders},
 		&mockBillingsProvider{billings: billings},
+		&mockLogger{},
 	)
 
 	ctx := context.Background()
@@ -128,6 +169,7 @@ func TestExecute_UsersError(t *testing.T) {
 		&mockUsersProvider{err: wantErr},
 		&mockOrdersProvider{orders: []dto.Order{}},
 		&mockBillingsProvider{billings: []dto.Billing{}},
+		&mockLogger{},
 	)
 
 	ctx := context.Background()
@@ -143,6 +185,7 @@ func TestExecute_OrdersError(t *testing.T) {
 		&mockUsersProvider{users: []dto.User{{ID: "user-1", Name: "John", Email: "j@x.com", OrderID: ""}}},
 		&mockOrdersProvider{err: wantErr},
 		&mockBillingsProvider{billings: []dto.Billing{}},
+		&mockLogger{},
 	)
 
 	ctx := context.Background()
@@ -167,6 +210,7 @@ func TestExecute_BillingsError(t *testing.T) {
 		&mockUsersProvider{users: []dto.User{{ID: "user-1", Name: "John", Email: "j@x.com", OrderID: "order-1"}}},
 		&mockOrdersProvider{orders: []dto.Order{{ID: "order-1", TotalPrice: 100, CreatedAt: "2025-01-01", BillingID: "b1", UserID: "user-1"}}},
 		&mockBillingsProvider{err: wantErr},
+		&mockLogger{},
 	)
 
 	ctx := context.Background()
@@ -194,6 +238,7 @@ func TestExecute_ContextCancelled(t *testing.T) {
 		&mockUsersProviderContextAware{},
 		&mockOrdersProvider{orders: []dto.Order{}},
 		&mockBillingsProvider{billings: []dto.Billing{}},
+		&mockLogger{},
 	)
 
 	_, err := uc.Execute(ctx)
@@ -210,6 +255,7 @@ func TestExecute_EmptyData(t *testing.T) {
 		&mockUsersProvider{users: []dto.User{}},
 		&mockOrdersProvider{orders: []dto.Order{}},
 		&mockBillingsProvider{billings: []dto.Billing{}},
+		&mockLogger{},
 	)
 
 	ctx := context.Background()
@@ -228,6 +274,7 @@ func TestExecute_ParallelTiming(t *testing.T) {
 		&mockUsersProviderSlow{delay: 100 * time.Millisecond, users: []dto.User{}},
 		&mockOrdersProviderSlow{delay: 200 * time.Millisecond, orders: []dto.Order{}},
 		&mockBillingsProviderSlow{delay: 150 * time.Millisecond, billings: []dto.Billing{}},
+		&mockLogger{},
 	)
 
 	t.Log("2. Context sem timeout para não cancelar os sleeps")
