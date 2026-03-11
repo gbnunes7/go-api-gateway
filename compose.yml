@@ -1,0 +1,66 @@
+services:
+  api-gateway:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      USERS_URL: http://users-mock:8081
+      ORDERS_URL: http://orders-mock:8082
+      BILLINGS_URL: http://billings-mock:8083
+      OTLP_ENDPOINT: tempo:4318
+    depends_on:
+      - tempo
+      - users-mock
+      - orders-mock
+      - billings-mock
+
+  users-mock:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+      args:
+        MOCK: users-mock
+    ports:
+      - "8081:8081"
+
+  orders-mock:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+      args:
+        MOCK: orders-mock
+    ports:
+      - "8082:8082"
+
+  billings-mock:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+      args:
+        MOCK: billings-mock
+    ports:
+      - "8083:8083"
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yml"]
+    volumes:
+      - ./tempo.yml:/etc/tempo.yml
+    ports:
+      - "4318:4318"
+      - "3200:3200"
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
