@@ -1,7 +1,6 @@
 package billings
 
 import (
-	"api-gateway-go/internal/dto"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +8,12 @@ import (
 	"net/url"
 
 	"api-gateway-go/internal/constants"
+	"api-gateway-go/internal/dto"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type Client struct {
@@ -25,32 +30,39 @@ func NewClient(baseURL string, httpClient *http.Client) *Client {
 
 func (c *Client) GetBillings(ctx context.Context) ([]dto.Billing, error) {
 	u, err := url.JoinPath(c.baseURL, "/billings")
-
 	if err != nil {
 		return nil, fmt.Errorf("billings client: build url error: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	tracer := otel.Tracer("api-gateway")
+	ctx, span := tracer.Start(ctx, "http.client.billings")
+	defer span.End()
+	span.SetAttributes(attribute.String("http.url", u))
 
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
 		return nil, fmt.Errorf("billings client: create request error: %w", err)
 	}
 
-	traceID, _ := ctx.Value(constants.TraceIDKey).(string)
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 
+	traceID, _ := ctx.Value(constants.TraceIDKey).(string)
 	if traceID != "" {
 		req.Header.Set(string(constants.TraceIDKey), traceID)
 	}
 
 	resp, err := c.httpClient.Do(req)
-
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
 		return nil, fmt.Errorf("billings client: do request error: %w", err)
 	}
-
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		span.SetStatus(codes.Error, fmt.Sprintf("status %d", resp.StatusCode))
 		return nil, fmt.Errorf("billings client: status code error: %d", resp.StatusCode)
 	}
 
