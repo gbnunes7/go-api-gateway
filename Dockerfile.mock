@@ -1,0 +1,17 @@
+FROM golang:1.25.0-alpine AS builder
+
+WORKDIR /app
+
+COPY go.mod go.sum* ./
+RUN go mod download
+
+COPY . .
+
+ARG MOCK=users-mock
+RUN CGO_ENABLED=0 go build -o /mock ./cmd/${MOCK}/main.go
+
+FROM alpine:3.19
+
+COPY --from=builder /mock /mock
+
+CMD ["/mock"]
